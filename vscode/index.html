@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Hand Fire → Candle</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <style>
+    body { margin:0; background:#000; overflow:hidden; }
+    canvas { display:block; }
+    #info {
+      position:absolute; top:15px; left:15px; color:white; 
+      background:rgba(0,0,0,0.7); padding:12px 18px; border-radius:10px;
+      font-family:Arial; z-index:100;
+    }
+  </style>
+</head>
+<body>
+  <!-- <div id="info">
+    Gerakkan <strong>jari telunjuk</strong> kamu<br>
+    Dekatkan ke sumbu lilin untuk menyalakan<br>
+    Tekan <strong>R</strong> untuk reset
+  </div> -->
+
+<script>
+// ====================== VARIABEL ======================
+let video;
+let handLandmarker;
+let handResults = [];
+let particles = [];
+let candleParticles = [];
+let candleLit = false;
+let lastTimestamp = -1;
+
+let candleImg;
+let CANDLE_X = 320;
+let CANDLE_Y = 420;
+
+// ====================== PARTICLE (LEBIH CEPAT HILANG) ======================
+class FireParticle {
+  constructor(x, y, isCandle = false) {
+    this.x = x + random(-5, 5);
+    this.y = y + random(-8, 3);
+    this.vx = random(-1.0, 1.0);
+    this.vy = isCandle ? random(-3.2, -1.6) : random(-5.2, -3.0);
+    this.life = isCandle ? random(35, 65) : random(22, 45);   // ← Dipercepat
+    this.maxLife = this.life;
+    this.sz = random(6, 12);
+    this.wobble = random(TWO_PI);
+    this.isCandle = isCandle;
+  }
+
+  update() {
+    this.wobble += 0.28;
+    this.x += this.vx + sin(this.wobble) * 0.75;
+    this.y += this.vy;
+    this.vy += this.isCandle ? 0.038 : -0.12;
+    this.vx *= 0.96;
+    this.life--;
+  }
+
+  display() {
+    let t = this.life / this.maxLife;
+    let s = this.sz * t;
+    if (s < 1) return;
+
+    let col;
+    if (t > 0.65)      col = color(255, 255, 140);
+    else if (t > 0.45) col = color(255, 190, 70);
+    else if (t > 0.25) col = color(255, 110, 40);
+    else               col = color(220, 55, 25);
+
+    noStroke();
+    fill(red(col), green(col), blue(col), t * 255);
+    ellipse(this.x, this.y, s * 2.0, s * 1.9);
+
+    fill(255, 255, 240, t * 230);
+    ellipse(this.x, this.y - s * 0.28, s * 1.0, s * 0.95);
+  }
+};
+
+// ====================== SETUP ======================
+async function setup() {
+  createCanvas(640, 480);
+
+  video = createCapture(VIDEO);
+  video.size(640, 480);
+  video.hide();
+
+  const { HandLandmarker, FilesetResolver } = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
+  );
+
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+  );
+
+  handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numHands: 2
+  });
+
+  candleImg = loadImage("assets/candle.png");
+}
+
+// ====================== DRAW ======================
+function draw() {
+  push();
+  translate(width, 0);
+  scale(-1, 1);
+  image(video, 0, 0, width, height);
+  pop();
+
+  if (handLandmarker && video.elt.readyState >= 2) {
+    const ts = performance.now();
+    if (ts > lastTimestamp + 25) {
+      lastTimestamp = ts;
+      const result = handLandmarker.detectForVideo(video.elt, ts);
+      handResults = result.landmarks || [];
+    }
+  }
+
+  let indexTip = null;
+
+  for (let hand of handResults) {
+    if (hand.length < 21) continue;
+
+    let tip = hand[8];
+    let sx = width - (tip.x * width);
+    let sy = tip.y * height;
+    indexTip = {x: sx, y: sy};
+
+    fill(0, 255, 120, 160);
+    noStroke();
+    circle(sx, sy, 8);
+
+    if (!candleLit) {
+      for (let i = 0; i < 4; i++) {
+        if (particles.length < 160) {
+          particles.push(new FireParticle(sx, sy));
+        }
+      }
+    }
+  }
+
+  // Lilin
+  if (candleImg && candleImg.width > 0) {
+    let scale = 170 / candleImg.width;
+    image(candleImg, CANDLE_X - 85, CANDLE_Y - 155, 170, candleImg.height * scale);
+  } else {
+    fill(225, 185, 110);
+    rect(CANDLE_X - 35, CANDLE_Y - 145, 70, 165, 12);
+  }
+
+  // Partikel
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    particles[i].display();
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+
+  if (candleLit) {
+    for (let i = 0; i < 6; i++) {
+      if (candleParticles.length < 130) {
+        candleParticles.push(new FireParticle(CANDLE_X, CANDLE_Y - 115, true));
+      }
+    }
+  }
+
+  for (let i = candleParticles.length - 1; i >= 0; i--) {
+    candleParticles[i].update();
+    candleParticles[i].display();
+    if (candleParticles[i].life <= 0) candleParticles.splice(i, 1);
+  }
+
+  if (indexTip && !candleLit) {
+    let d = dist(indexTip.x, indexTip.y, CANDLE_X, CANDLE_Y - 115);
+    if (d < 80) candleLit = true;
+  }
+
+  fill(255);
+  textSize(20);
+  textAlign(CENTER);
+  text(candleLit ? "LILIN MENYALA 🔥" : "Dekatkan jari telunjuk ke sumbu lilin", width/2, 45);
+}
+
+function keyPressed() {
+  if (key === 'r' || key === 'R') {
+    candleLit = false;
+    candleParticles = [];
+    particles = [];
+  }
+}
+</script>
+</body>
+</html>
