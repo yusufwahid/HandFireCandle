@@ -5,21 +5,29 @@
   <title>Hand Fire → Candle</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
   <style>
-    body { margin:0; background:#000; overflow:hidden; }
+    body { 
+      margin:0; 
+      background:#000; 
+      overflow:hidden; 
+      display:flex; 
+      justify-content:center; 
+      align-items:center; 
+      height:100vh;
+    }
     canvas { display:block; }
     #info {
-      position:absolute; top:15px; left:15px; color:white; 
-      background:rgba(0,0,0,0.7); padding:12px 18px; border-radius:10px;
-      font-family:Arial; z-index:100;
+      position:absolute; top:20px; left:20px; color:white; 
+      background:rgba(0,0,0,0.75); padding:15px 20px; border-radius:12px;
+      z-index:100; line-height:1.5;
     }
   </style>
 </head>
 <body>
-  <!-- <div id="info">
-    Gerakkan <strong>jari telunjuk</strong> kamu<br>
+  <div id="info">
+    Gerakkan jari telunjuk kamu<br>
     Dekatkan ke sumbu lilin untuk menyalakan<br>
     Tekan <strong>R</strong> untuk reset
-  </div> -->
+  </div>
 
 <script>
 // ====================== VARIABEL ======================
@@ -32,17 +40,16 @@ let candleLit = false;
 let lastTimestamp = -1;
 
 let candleImg;
-let CANDLE_X = 320;
-let CANDLE_Y = 420;
+let CANDLE_X, CANDLE_Y;
 
-// ====================== PARTICLE (LEBIH CEPAT HILANG) ======================
+// ====================== PARTICLE ======================
 class FireParticle {
   constructor(x, y, isCandle = false) {
     this.x = x + random(-5, 5);
     this.y = y + random(-8, 3);
     this.vx = random(-1.0, 1.0);
     this.vy = isCandle ? random(-3.2, -1.6) : random(-5.2, -3.0);
-    this.life = isCandle ? random(35, 65) : random(22, 45);   // ← Dipercepat
+    this.life = isCandle ? random(35, 65) : random(22, 45);
     this.maxLife = this.life;
     this.sz = random(6, 12);
     this.wobble = random(TWO_PI);
@@ -80,10 +87,10 @@ class FireParticle {
 
 // ====================== SETUP ======================
 async function setup() {
-  createCanvas(640, 480);
+  createCanvas(1000, 650);
 
   video = createCapture(VIDEO);
-  video.size(640, 480);
+  video.size(800, 600);
   video.hide();
 
   const { HandLandmarker, FilesetResolver } = await import(
@@ -104,14 +111,24 @@ async function setup() {
   });
 
   candleImg = loadImage("assets/candle.png");
+
+  CANDLE_X = width / 2;
+  CANDLE_Y = height - 130;
 }
 
 // ====================== DRAW ======================
 function draw() {
+  background(0);
+
+  let videoW = 800;
+  let videoH = 600;
+  let videoX = (width - videoW) / 2;
+  let videoY = (height - videoH) / 2 - 50;
+
   push();
-  translate(width, 0);
+  translate(videoX + videoW, videoY);
   scale(-1, 1);
-  image(video, 0, 0, width, height);
+  image(video, 0, 0, videoW, videoH);
   pop();
 
   if (handLandmarker && video.elt.readyState >= 2) {
@@ -129,13 +146,14 @@ function draw() {
     if (hand.length < 21) continue;
 
     let tip = hand[8];
-    let sx = width - (tip.x * width);
-    let sy = tip.y * height;
+    let sx = videoX + videoW - (tip.x * videoW);
+    let sy = videoY + tip.y * videoH;
     indexTip = {x: sx, y: sy};
 
-    fill(0, 255, 120, 160);
+    // Warna deteksi jari telunjuk jadi KUNING
+    fill(255, 240, 0, 200);
     noStroke();
-    circle(sx, sy, 8);
+    circle(sx, sy, 10);
 
     if (!candleLit) {
       for (let i = 0; i < 4; i++) {
